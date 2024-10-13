@@ -35,7 +35,7 @@
 //
 // The keychain is stored unencrypted in the text file $HOME/.2fa.
 //
-// Example
+// # Example
 //
 // During GitHub 2FA setup, at the “Scan this barcode with your app” step,
 // click the “enter this text code instead” link. A window pops up showing
@@ -58,7 +58,6 @@
 //	$ 2fa
 //	268346	github
 //	$
-//
 package main
 
 import (
@@ -70,7 +69,6 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -158,7 +156,7 @@ func readKeychain(file string) *Keychain {
 		file: file,
 		keys: make(map[string]Key),
 	}
-	data, err := ioutil.ReadFile(file)
+	data, err := os.ReadFile(file)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return c
@@ -256,7 +254,9 @@ func (c *Keychain) add(name string) {
 	if err != nil {
 		log.Fatalf("opening keychain: %v", err)
 	}
-	f.Chmod(0600)
+	if err := f.Chmod(0600); err != nil {
+		log.Fatalf("failed to change file mode to 0600: %v", err)
+	}
 
 	if _, err := f.Write([]byte(line)); err != nil {
 		log.Fatalf("adding key: %v", err)
@@ -299,7 +299,9 @@ func (c *Keychain) code(name string) string {
 func (c *Keychain) show(name string) {
 	code := c.code(name)
 	if *flagClip {
-		clipboard.WriteAll(code)
+		if err := clipboard.WriteAll(code); err != nil {
+			log.Fatalf("failed to write to clipboard: %v", err)
+		}
 	}
 	fmt.Printf("%s\n", code)
 }
@@ -330,7 +332,10 @@ func decodeKey(key string) ([]byte, error) {
 
 func hotp(key []byte, counter uint64, digits int) int {
 	h := hmac.New(sha1.New, key)
-	binary.Write(h, binary.BigEndian, counter)
+	if err := binary.Write(h, binary.BigEndian, counter); err != nil {
+		log.Fatalf("failed to write counter: %v", err)
+	}
+
 	sum := h.Sum(nil)
 	v := binary.BigEndian.Uint32(sum[sum[len(sum)-1]&0x0F:]) & 0x7FFFFFFF
 	d := uint32(1)
